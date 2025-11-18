@@ -374,7 +374,7 @@ async function searchInterface() {
 				</svg>
 			</div>
 			<h1 class="title">Docker Hub 镜像搜索</h1>
-			<p class="subtitle">快速查找、下载和部署 Docker 容器镜像</p>
+			<p class="subtitle">查找 Docker 容器镜像</p>
 			<div class="search-container">
 				<input type="text" id="search-input" placeholder="输入关键词搜索镜像，如: nginx, mysql, redis...">
 				<button id="search-button" title="搜索">
@@ -383,7 +383,6 @@ async function searchInterface() {
 					</svg>
 				</button>
 			</div>
-			<p class="tips">基于 Cloudflare Workers / Pages 构建，利用全球边缘网络实现毫秒级响应。</p>
 		</div>
 		<script>
 		function performSearch() {

@@ -508,9 +508,13 @@ export default {
 					'Cache-Control': 'max-age=0'
 				}
 			};
-			if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+			
+			if (request.headers.has("Authorization")) {
+				token_parameter.headers['Authorization'] = getReqHeader("Authorization");
+			} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
 				token_parameter.headers['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
 			}
+			
 			let token_url = auth_url + url.pathname + url.search;
 			return fetch(new Request(token_url, request), token_parameter);
 		}
@@ -548,9 +552,13 @@ export default {
 					'Connection': 'keep-alive',
 					'Cache-Control': 'max-age=0'
 				};
-				if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+				
+				if (request.headers.has("Authorization")) {
+					tokenHeaders['Authorization'] = getReqHeader("Authorization");
+				} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
 					tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
 				}
+				
 				const tokenRes = await fetch(tokenUrl, {
 					headers: tokenHeaders
 				});

@@ -396,14 +396,27 @@ export default {
 				}
 			};
 			
-			if (request.headers.has("Authorization")) {
-				token_parameter.headers['Authorization'] = getReqHeader("Authorization");
+			const hasAuth = request.headers.has("Authorization");
+			console.log(`Token request - Has Authorization: ${hasAuth}`);
+			
+			if (hasAuth) {
+				const authHeader = getReqHeader("Authorization");
+				console.log(`Authorization header: ${authHeader.substring(0, 20)}...`);
+				token_parameter.headers['Authorization'] = authHeader;
 			} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+				console.log(`Using env credentials: ${env.DOCKER_USERNAME}`);
 				token_parameter.headers['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+			} else {
+				console.log(`No credentials found, making anonymous request`);
 			}
 			
 			let token_url = auth_url + url.pathname + url.search;
-			return fetch(new Request(token_url, request), token_parameter);
+			console.log(`Fetching token from: ${token_url}`);
+			
+			const tokenResponse = await fetch(new Request(token_url, request), token_parameter);
+			console.log(`Token response status: ${tokenResponse.status}`);
+			
+			return tokenResponse;
 		}
 
 		// 修改 /v2/ 请求路径

@@ -413,10 +413,14 @@ export default {
 			let token_url = auth_url + url.pathname + url.search;
 			console.log(`Fetching token from: ${token_url}`);
 			
-			const tokenResponse = await fetch(new Request(token_url, request), token_parameter);
-			console.log(`Token response status: ${tokenResponse.status}`);
-			
-			return tokenResponse;
+			try {
+				const tokenResponse = await fetch(new Request(token_url, request), token_parameter);
+				console.log(`Token response status: ${tokenResponse.status}`);
+				return tokenResponse;
+			} catch (error) {
+				console.error(`Token request failed: ${error.message}`);
+				return makeRes(`Token request failed: ${error.message}`, 502);
+			}
 		}
 
 		// 修改 /v2/ 请求路径
@@ -436,71 +440,75 @@ export default {
 				|| url.pathname.endsWith('/tags/list')
 			)
 		) {
-			// 提取镜像名
-			let repo = '';
-			const v2Match = url.pathname.match(/^\/v2\/(.+?)(?:\/(manifests|blobs|tags)\/)/);
-			if (v2Match) {
-				repo = v2Match[1];
-			}
-			if (repo) {
-				const tokenUrl = `${auth_url}/token?service=registry.docker.io&scope=repository:${repo}:pull`;
-				const tokenHeaders = {
-					'User-Agent': getReqHeader("User-Agent"),
-					'Accept': getReqHeader("Accept"),
-					'Accept-Language': getReqHeader("Accept-Language"),
-					'Accept-Encoding': getReqHeader("Accept-Encoding"),
-					'Connection': 'keep-alive',
-					'Cache-Control': 'max-age=0'
-				};
-				
-				if (request.headers.has("Authorization")) {
-					tokenHeaders['Authorization'] = getReqHeader("Authorization");
-				} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
-					tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+			try {
+				let repo = '';
+				const v2Match = url.pathname.match(/^\/v2\/(.+?)(?:\/(manifests|blobs|tags)\/)/);
+				if (v2Match) {
+					repo = v2Match[1];
 				}
-				
-				const tokenRes = await fetch(tokenUrl, {
-					headers: tokenHeaders
-				});
-				const tokenData = await tokenRes.json();
-				const token = tokenData.token;
-				let parameter = {
-					headers: {
-						'Host': hub_host,
+				if (repo) {
+					const tokenUrl = `${auth_url}/token?service=registry.docker.io&scope=repository:${repo}:pull`;
+					const tokenHeaders = {
 						'User-Agent': getReqHeader("User-Agent"),
 						'Accept': getReqHeader("Accept"),
 						'Accept-Language': getReqHeader("Accept-Language"),
 						'Accept-Encoding': getReqHeader("Accept-Encoding"),
 						'Connection': 'keep-alive',
-						'Cache-Control': 'max-age=0',
-						'Authorization': `Bearer ${token}`
-					},
-					cacheTtl: 3600
-				};
-				if (request.headers.has("X-Amz-Content-Sha256")) {
-					parameter.headers['X-Amz-Content-Sha256'] = getReqHeader("X-Amz-Content-Sha256");
+						'Cache-Control': 'max-age=0'
+					};
+					
+					if (request.headers.has("Authorization")) {
+						tokenHeaders['Authorization'] = getReqHeader("Authorization");
+					} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+						tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+					}
+					
+					const tokenRes = await fetch(tokenUrl, {
+						headers: tokenHeaders
+					});
+					const tokenData = await tokenRes.json();
+					const token = tokenData.token;
+					let parameter = {
+						headers: {
+							'Host': hub_host,
+							'User-Agent': getReqHeader("User-Agent"),
+							'Accept': getReqHeader("Accept"),
+							'Accept-Language': getReqHeader("Accept-Language"),
+							'Accept-Encoding': getReqHeader("Accept-Encoding"),
+							'Connection': 'keep-alive',
+							'Cache-Control': 'max-age=0',
+							'Authorization': `Bearer ${token}`
+						},
+						cacheTtl: 3600
+					};
+					if (request.headers.has("X-Amz-Content-Sha256")) {
+						parameter.headers['X-Amz-Content-Sha256'] = getReqHeader("X-Amz-Content-Sha256");
+					}
+					let original_response = await fetch(new Request(url, request), parameter);
+					let original_response_clone = original_response.clone();
+					let original_text = original_response_clone.body;
+					let response_headers = original_response.headers;
+					let new_response_headers = new Headers(response_headers);
+					let status = original_response.status;
+					if (new_response_headers.get("Www-Authenticate")) {
+						let auth = new_response_headers.get("Www-Authenticate");
+						let re = new RegExp(auth_url, 'g');
+						new_response_headers.set("Www-Authenticate", response_headers.get("Www-Authenticate").replace(re, workers_url));
+					}
+					if (new_response_headers.get("Location")) {
+						const location = new_response_headers.get("Location");
+						console.info(`Found redirection location, redirecting to ${location}`);
+						return httpHandler(request, location, hub_host);
+					}
+					let response = new Response(original_text, {
+						status,
+						headers: new_response_headers
+					});
+					return response;
 				}
-				let original_response = await fetch(new Request(url, request), parameter);
-				let original_response_clone = original_response.clone();
-				let original_text = original_response_clone.body;
-				let response_headers = original_response.headers;
-				let new_response_headers = new Headers(response_headers);
-				let status = original_response.status;
-				if (new_response_headers.get("Www-Authenticate")) {
-					let auth = new_response_headers.get("Www-Authenticate");
-					let re = new RegExp(auth_url, 'g');
-					new_response_headers.set("Www-Authenticate", response_headers.get("Www-Authenticate").replace(re, workers_url));
-				}
-				if (new_response_headers.get("Location")) {
-					const location = new_response_headers.get("Location");
-					console.info(`Found redirection location, redirecting to ${location}`);
-					return httpHandler(request, location, hub_host);
-				}
-				let response = new Response(original_text, {
-					status,
-					headers: new_response_headers
-				});
-				return response;
+			} catch (error) {
+				console.error(`Manifest/Blob request failed: ${error.message}`);
+				return makeRes(`Request failed: ${error.message}`, 502);
 			}
 		}
 
@@ -529,33 +537,35 @@ export default {
 		}
 
 		// 发起请求并处理响应
-		let original_response = await fetch(new Request(url, request), parameter);
-		let original_response_clone = original_response.clone();
-		let original_text = original_response_clone.body;
-		let response_headers = original_response.headers;
-		let new_response_headers = new Headers(response_headers);
-		let status = original_response.status;
+		try {
+			let original_response = await fetch(new Request(url, request), parameter);
+			let original_response_clone = original_response.clone();
+			let original_text = original_response_clone.body;
+			let response_headers = original_response.headers;
+			let new_response_headers = new Headers(response_headers);
+			let status = original_response.status;
 
-		// 修改 Www-Authenticate 头
-		if (new_response_headers.get("Www-Authenticate")) {
-			let auth = new_response_headers.get("Www-Authenticate");
-			let re = new RegExp(auth_url, 'g');
-			new_response_headers.set("Www-Authenticate", response_headers.get("Www-Authenticate").replace(re, workers_url));
+			if (new_response_headers.get("Www-Authenticate")) {
+				let auth = new_response_headers.get("Www-Authenticate");
+				let re = new RegExp(auth_url, 'g');
+				new_response_headers.set("Www-Authenticate", response_headers.get("Www-Authenticate").replace(re, workers_url));
+			}
+
+			if (new_response_headers.get("Location")) {
+				const location = new_response_headers.get("Location");
+				console.info(`Found redirection location, redirecting to ${location}`);
+				return httpHandler(request, location, hub_host);
+			}
+
+			let response = new Response(original_text, {
+				status,
+				headers: new_response_headers
+			});
+			return response;
+		} catch (error) {
+			console.error(`Main request failed: ${error.message}`);
+			return makeRes(`Request failed: ${error.message}`, 502);
 		}
-
-		// 处理重定向
-		if (new_response_headers.get("Location")) {
-			const location = new_response_headers.get("Location");
-			console.info(`Found redirection location, redirecting to ${location}`);
-			return httpHandler(request, location, hub_host);
-		}
-
-		// 返回修改后的响应
-		let response = new Response(original_text, {
-			status,
-			headers: new_response_headers
-		});
-		return response;
 	}
 };
 
@@ -568,7 +578,6 @@ export default {
 function httpHandler(req, pathname, baseHost) {
 	const reqHdrRaw = req.headers;
 
-	// 处理预检请求
 	if (req.method === 'OPTIONS' &&
 		reqHdrRaw.has('access-control-request-headers')
 	) {
@@ -579,15 +588,23 @@ function httpHandler(req, pathname, baseHost) {
 
 	const reqHdrNew = new Headers(reqHdrRaw);
 
-	reqHdrNew.delete("Authorization"); // 修复s3错误
+	reqHdrNew.delete("Authorization");
 
 	const refer = reqHdrNew.get('referer');
 
 	let urlStr = pathname;
 
-	const urlObj = newUrl(urlStr, 'https://' + baseHost);
+	let urlObj;
+	if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
+		urlObj = newUrl(urlStr);
+	} else {
+		urlObj = newUrl(urlStr, 'https://' + baseHost);
+	}
 
-	/** @type {RequestInit} */
+	if (!urlObj) {
+		return makeRes('Invalid URL', 400);
+	}
+
 	const reqInit = {
 		method: req.method,
 		headers: reqHdrNew,

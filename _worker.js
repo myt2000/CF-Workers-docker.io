@@ -311,8 +311,12 @@ export default {
 		const workers_url = `https://${url.hostname}`;
 
 		if (env.ACCESS_PASSWORD) {
+			console.log('ACCESS_PASSWORD is configured');
 			const authHeader = request.headers.get('Authorization');
+			console.log(`Auth header: ${authHeader ? authHeader.substring(0, 20) + '...' : 'not found'}`);
+			
 			if (!authHeader || !authHeader.startsWith('Basic ')) {
+				console.log('No valid auth header, returning 401');
 				return new Response('Authentication required', {
 					status: 401,
 					headers: {
@@ -324,8 +328,10 @@ export default {
 
 			const credentials = atob(authHeader.substring(6));
 			const [username, password] = credentials.split(':');
+			console.log(`Username: ${username}, Password length: ${password ? password.length : 0}`);
 
 			if (password !== env.ACCESS_PASSWORD) {
+				console.log('Password mismatch, returning 401');
 				return new Response('Invalid password', {
 					status: 401,
 					headers: {
@@ -334,6 +340,10 @@ export default {
 					},
 				});
 			}
+			
+			console.log('Authentication successful');
+		} else {
+			console.log('ACCESS_PASSWORD is not configured');
 		}
 
 		// 获取请求参数中的 ns

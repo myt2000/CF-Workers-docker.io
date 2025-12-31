@@ -7,6 +7,13 @@ const auth_url = 'https://auth.docker.io';
 
 let 屏蔽爬虫UA = ['netcraft'];
 
+// 生成 Basic Auth
+function generateBasicAuth(username, password) {
+	const credentials = `${username}:${password}`;
+	const encoded = btoa(credentials);
+	return `Basic ${encoded}`;
+}
+
 // 根据主机名选择对应的上游地址
 function routeByHosts(host) {
 	// 定义路由表
@@ -501,6 +508,9 @@ export default {
 					'Cache-Control': 'max-age=0'
 				}
 			};
+			if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+				token_parameter.headers['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+			}
 			let token_url = auth_url + url.pathname + url.search;
 			return fetch(new Request(token_url, request), token_parameter);
 		}
@@ -530,15 +540,19 @@ export default {
 			}
 			if (repo) {
 				const tokenUrl = `${auth_url}/token?service=registry.docker.io&scope=repository:${repo}:pull`;
+				const tokenHeaders = {
+					'User-Agent': getReqHeader("User-Agent"),
+					'Accept': getReqHeader("Accept"),
+					'Accept-Language': getReqHeader("Accept-Language"),
+					'Accept-Encoding': getReqHeader("Accept-Encoding"),
+					'Connection': 'keep-alive',
+					'Cache-Control': 'max-age=0'
+				};
+				if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+					tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+				}
 				const tokenRes = await fetch(tokenUrl, {
-					headers: {
-						'User-Agent': getReqHeader("User-Agent"),
-						'Accept': getReqHeader("Accept"),
-						'Accept-Language': getReqHeader("Accept-Language"),
-						'Accept-Encoding': getReqHeader("Accept-Encoding"),
-						'Connection': 'keep-alive',
-						'Cache-Control': 'max-age=0'
-					}
+					headers: tokenHeaders
 				});
 				const tokenData = await tokenRes.json();
 				const token = tokenData.token;

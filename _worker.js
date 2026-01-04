@@ -330,8 +330,15 @@ export default {
 			const [username, password] = credentials.split(':');
 			console.log(`Username: ${username}, Password length: ${password ? password.length : 0}`);
 
-			if (password !== env.ACCESS_PASSWORD) {
+			// 兼容Docker客户端认证方式：支持两种模式
+			// 模式1: username:password (浏览器模式)
+			// 模式2: password: (Docker模式，只有密码)
+			const isValidPassword = (password === env.ACCESS_PASSWORD) || 
+								   (username === env.ACCESS_PASSWORD && !password);
+
+			if (!isValidPassword) {
 				console.log('Password mismatch, returning 401');
+				console.log(`Expected: ${env.ACCESS_PASSWORD}, Got username: ${username}, password: ${password}`);
 				return new Response('Invalid password', {
 					status: 401,
 					headers: {

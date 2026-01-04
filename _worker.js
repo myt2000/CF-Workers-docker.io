@@ -311,10 +311,12 @@ export default {
 		const workers_url = `https://${url.hostname}`;
 
 		if (env.ACCESS_PASSWORD) {
-			console.log('ACCESS_PASSWORD is configured');
+			console.log('=== Docker Authentication Debug ===');
+			console.log('ACCESS_PASSWORD is configured:', env.ACCESS_PASSWORD);
 			const authHeader = request.headers.get('Authorization');
-			console.log(`Auth header: ${authHeader ? authHeader.substring(0, 20) + '...' : 'not found'}`);
-			
+			console.log(`Full auth header: ${authHeader || 'not found'}`);
+			console.log(`Auth header length: ${authHeader ? authHeader.length : 0}`);
+
 			if (!authHeader || !authHeader.startsWith('Basic ')) {
 				console.log('No valid auth header, returning 401');
 				return new Response('Authentication required', {
@@ -326,20 +328,48 @@ export default {
 				});
 			}
 
-			const credentials = atob(authHeader.substring(6));
-			const [username, password] = credentials.split(':');
-			console.log(`Username: ${username}, Password length: ${password ? password.length : 0}`);
+			try {
+				const base64Credentials = authHeader.substring(6);
+				console.log('Base64 credentials:', base64Credentials);
+				const credentials = atob(base64Credentials);
+				console.log('Decoded credentials:', credentials);
+				const [username, password] = credentials.split(':');
+				console.log(`Extracted - Username: "${username}", Password: "${password}"`);
+				console.log(`Username length: ${username.length}, Password length: ${password.length}`);
 
-			// 兼容Docker客户端认证方式：支持两种模式
-			// 模式1: username:password (浏览器模式)
-			// 模式2: password: (Docker模式，只有密码)
-			const isValidPassword = (password === env.ACCESS_PASSWORD) || 
-								   (username === env.ACCESS_PASSWORD && !password);
+				// 兼容Docker客户端认证方式：支持多种模式
+				// 模式1: username:password (浏览器模式)
+				// 模式2: password: (Docker模式，用户名是密码，密码为空)
+				// 模式3: :password (Docker模式，用户名空，密码是密码)
+				const isValidPassword1 = (password === env.ACCESS_PASSWORD);
+				const isValidPassword2 = (username === env.ACCESS_PASSWORD && !password);
+				const isValidPassword3 = (!username && password === env.ACCESS_PASSWORD);
 
-			if (!isValidPassword) {
-				console.log('Password mismatch, returning 401');
-				console.log(`Expected: ${env.ACCESS_PASSWORD}, Got username: ${username}, password: ${password}`);
-				return new Response('Invalid password', {
+				const isValidPassword = isValidPassword1 || isValidPassword2 || isValidPassword3;
+
+				console.log(`Password validation checks:`);
+				console.log(`  Check 1 (password === ACCESS_PASSWORD): ${isValidPassword1}`);
+				console.log(`  Check 2 (username === ACCESS_PASSWORD && !password): ${isValidPassword2}`);
+				console.log(`  Check 3 (!username && password === ACCESS_PASSWORD): ${isValidPassword3}`);
+				console.log(`  Final result: ${isValidPassword}`);
+
+				if (!isValidPassword) {
+					console.log('Authentication failed - password mismatch');
+					console.log(`Expected ACCESS_PASSWORD: "${env.ACCESS_PASSWORD}"`);
+					console.log(`Got username: "${username}", password: "${password}"`);
+					return new Response('Invalid password', {
+						status: 401,
+						headers: {
+							'WWW-Authenticate': 'Basic realm="Docker Proxy"',
+							'Content-Type': 'text/plain; charset=UTF-8',
+						},
+					});
+				}
+
+				console.log('Authentication successful!');
+			} catch (error) {
+				console.error('Authentication error:', error.message);
+				return new Response('Authentication error', {
 					status: 401,
 					headers: {
 						'WWW-Authenticate': 'Basic realm="Docker Proxy"',
@@ -347,8 +377,6 @@ export default {
 					},
 				});
 			}
-			
-			console.log('Authentication successful');
 		} else {
 			console.log('ACCESS_PASSWORD is not configured');
 		}
@@ -438,10 +466,10 @@ export default {
 					'Cache-Control': 'max-age=0'
 				}
 			};
-			
+
 			const hasAuth = request.headers.has("Authorization");
 			console.log(`Token request - Has Authorization: ${hasAuth}`);
-			
+
 			if (hasAuth) {
 				const authHeader = getReqHeader("Authorization");
 				console.log(`Authorization header: ${authHeader.substring(0, 20)}...`);
@@ -452,10 +480,10 @@ export default {
 			} else {
 				console.log(`No credentials found, making anonymous request`);
 			}
-			
+
 			let token_url = auth_url + url.pathname + url.search;
 			console.log(`Fetching token from: ${token_url}`);
-			
+
 			try {
 				const tokenResponse = await fetch(new Request(token_url, request), token_parameter);
 				console.log(`Token response status: ${tokenResponse.status}`);
@@ -499,13 +527,13 @@ export default {
 						'Connection': 'keep-alive',
 						'Cache-Control': 'max-age=0'
 					};
-					
+
 					if (request.headers.has("Authorization")) {
 						tokenHeaders['Authorization'] = getReqHeader("Authorization");
 					} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
 						tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
 					}
-					
+
 					const tokenRes = await fetch(tokenUrl, {
 						headers: tokenHeaders
 					});

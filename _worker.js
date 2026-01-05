@@ -570,17 +570,26 @@ export default {
 
 		// 发起请求并处理响应
 		try {
+			console.log(`[DEBUG] Fetching: ${url.pathname}`);
+			console.log(`[DEBUG] Using Docker Hub auth: ${!!(env.DOCKER_USERNAME && env.DOCKER_PASSWORD)}`);
+			console.log(`[DEBUG] Using client auth: ${request.headers.has("Authorization")}`);
+			
 			let original_response = await fetch(new Request(url, request), parameter);
 			let original_response_clone = original_response.clone();
 			let original_text = original_response_clone.body;
 			let response_headers = original_response.headers;
 			let new_response_headers = new Headers(response_headers);
 			let status = original_response.status;
+			
+			console.log(`[DEBUG] Response status: ${status}`);
+			console.log(`[DEBUG] Www-Authenticate header: ${new_response_headers.get("Www-Authenticate")}`);
 
 			if (new_response_headers.get("Www-Authenticate")) {
 				let auth = new_response_headers.get("Www-Authenticate");
+				console.log(`[DEBUG] Original Www-Authenticate: ${auth}`);
 				let re = new RegExp(auth_url, 'g');
 				new_response_headers.set("Www-Authenticate", response_headers.get("Www-Authenticate").replace(re, workers_url));
+				console.log(`[DEBUG] Modified Www-Authenticate: ${new_response_headers.get("Www-Authenticate")}`);
 			}
 
 			if (new_response_headers.get("Location")) {

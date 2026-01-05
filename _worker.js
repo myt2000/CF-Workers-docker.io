@@ -327,6 +327,7 @@ export default {
 
 			if (password !== env.ACCESS_PASSWORD) {
 				return new Response('Invalid password', {
+
 					status: 401,
 					headers: {
 						'WWW-Authenticate': 'Basic realm="Docker Proxy"',
@@ -334,6 +335,7 @@ export default {
 					},
 				});
 			}
+
 		}
 
 		// 获取请求参数中的 ns
@@ -421,10 +423,10 @@ export default {
 					'Cache-Control': 'max-age=0'
 				}
 			};
-			
+
 			const hasAuth = request.headers.has("Authorization");
 			console.log(`Token request - Has Authorization: ${hasAuth}`);
-			
+
 			if (hasAuth) {
 				const authHeader = getReqHeader("Authorization");
 				console.log(`Authorization header: ${authHeader.substring(0, 20)}...`);
@@ -435,10 +437,10 @@ export default {
 			} else {
 				console.log(`No credentials found, making anonymous request`);
 			}
-			
+
 			let token_url = auth_url + url.pathname + url.search;
 			console.log(`Fetching token from: ${token_url}`);
-			
+
 			try {
 				const tokenResponse = await fetch(new Request(token_url, request), token_parameter);
 				console.log(`Token response status: ${tokenResponse.status}`);
@@ -482,13 +484,13 @@ export default {
 						'Connection': 'keep-alive',
 						'Cache-Control': 'max-age=0'
 					};
-					
+
 					if (request.headers.has("Authorization")) {
 						tokenHeaders['Authorization'] = getReqHeader("Authorization");
 					} else if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
 						tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
 					}
-					
+
 					const tokenRes = await fetch(tokenUrl, {
 						headers: tokenHeaders
 					});

@@ -554,12 +554,13 @@ export default {
 			cacheTtl: 3600 // 缓存时间
 		};
 
-		// 如果配置了 Docker Hub 认证，使用 DOCKER_USERNAME 和 DOCKER_PASSWORD
-		if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
-			parameter.headers['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
-		} else if (request.headers.has("Authorization")) {
-			// 否则使用客户端的 Authorization 头
-			parameter.headers['Authorization'] = getReqHeader("Authorization");
+		// 对于 /v2/ 请求，不使用 Docker Hub 凭证，让 Docker 客户端请求 token
+		if (url.pathname !== '/v2/' && url.pathname !== '/v2') {
+			if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+				parameter.headers['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+			} else if (request.headers.has("Authorization")) {
+				parameter.headers['Authorization'] = getReqHeader("Authorization");
+			}
 		}
 
 		// 添加可能存在字段X-Amz-Content-Sha256

@@ -554,9 +554,12 @@ export default {
 			cacheTtl: 3600 // 缓存时间
 		};
 
-		// 添加Authorization头
-		if (request.headers.has("Authorization")) {
-			parameter.headers.Authorization = getReqHeader("Authorization");
+		// 如果配置了 Docker Hub 认证，使用 DOCKER_USERNAME 和 DOCKER_PASSWORD
+		if (env.DOCKER_USERNAME && env.DOCKER_PASSWORD) {
+			parameter.headers['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
+		} else if (request.headers.has("Authorization")) {
+			// 否则使用客户端的 Authorization 头
+			parameter.headers['Authorization'] = getReqHeader("Authorization");
 		}
 
 		// 添加可能存在字段X-Amz-Content-Sha256
@@ -615,8 +618,8 @@ function httpHandler(req, pathname, baseHost) {
 	let rawLen = '';
 
 	const reqHdrNew = new Headers(reqHdrRaw);
-
-	reqHdrNew.delete("Authorization");
+	// 删除 Authorization 头后，转发给上游 Docker Registry 的请求变成了“匿名请求”。Docker Registry 服务器检测到请求缺少合法凭证，于是返回 401 Unauthorized 错误
+	// reqHdrNew.delete("Authorization");
 
 	const refer = reqHdrNew.get('referer');
 

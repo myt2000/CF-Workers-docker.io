@@ -494,7 +494,31 @@ export default {
 					const tokenRes = await fetch(tokenUrl, {
 						headers: tokenHeaders
 					});
-					const tokenData = await tokenRes.json();
+					
+					// 检查token响应状态
+					if (!tokenRes.ok) {
+						console.error(`Token request failed with status: ${tokenRes.status}, url: ${tokenUrl}`);
+						// 如果token获取失败，继续执行主请求逻辑
+						throw new Error(`Token request failed: ${tokenRes.status}`);
+					}
+					
+					// 安全解析token响应
+					let tokenData;
+					try {
+						tokenData = await tokenRes.json();
+					} catch (jsonError) {
+						console.error(`Failed to parse token response: ${jsonError.message}`);
+						// 如果解析失败，继续执行主请求逻辑
+						throw jsonError;
+					}
+					
+					// 检查token字段是否存在
+					if (!tokenData || !tokenData.token) {
+						console.error(`Token response missing token field: ${JSON.stringify(tokenData)}`);
+						// 如果token不存在，继续执行主请求逻辑
+						throw new Error("Token response missing token field");
+					}
+					
 					const token = tokenData.token;
 					let parameter = {
 						headers: {
@@ -535,8 +559,8 @@ export default {
 					return response;
 				}
 			} catch (error) {
-				console.error(`Manifest/Blob request failed: ${error.message}`);
-				return makeRes(`Request failed: ${error.message}`, 502);
+				console.error(`Manifest/Blob request failed: ${error.message}, URL: ${url.pathname}`);
+				// 如果token获取逻辑失败，不直接返回502，而是继续执行主请求逻辑
 			}
 		}
 
@@ -570,26 +594,17 @@ export default {
 
 		// 发起请求并处理响应
 		try {
-			console.log(`[DEBUG] Fetching: ${url.pathname}`);
-			console.log(`[DEBUG] Using Docker Hub auth: ${!!(env.DOCKER_USERNAME && env.DOCKER_PASSWORD)}`);
-			console.log(`[DEBUG] Using client auth: ${request.headers.has("Authorization")}`);
-			
 			let original_response = await fetch(new Request(url, request), parameter);
 			let original_response_clone = original_response.clone();
 			let original_text = original_response_clone.body;
 			let response_headers = original_response.headers;
 			let new_response_headers = new Headers(response_headers);
 			let status = original_response.status;
-			
-			console.log(`[DEBUG] Response status: ${status}`);
-			console.log(`[DEBUG] Www-Authenticate header: ${new_response_headers.get("Www-Authenticate")}`);
 
 			if (new_response_headers.get("Www-Authenticate")) {
 				let auth = new_response_headers.get("Www-Authenticate");
-				console.log(`[DEBUG] Original Www-Authenticate: ${auth}`);
 				let re = new RegExp(auth_url, 'g');
 				new_response_headers.set("Www-Authenticate", response_headers.get("Www-Authenticate").replace(re, workers_url));
-				console.log(`[DEBUG] Modified Www-Authenticate: ${new_response_headers.get("Www-Authenticate")}`);
 			}
 
 			if (new_response_headers.get("Location")) {

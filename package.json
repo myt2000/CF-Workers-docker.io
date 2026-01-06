@@ -1,0 +1,15 @@
+{
+  "name": "cf-workers-docker-proxy",
+  "version": "1.0.0",
+  "description": "Docker Hub proxy using Cloudflare Workers",
+  "main": "_worker.js",
+  "scripts": {
+    "deploy": "wrangler deploy _worker.js --env production"
+  },
+  "keywords": ["cloudflare", "workers", "docker", "proxy"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.54.0"
+  }
+}

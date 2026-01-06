@@ -310,32 +310,30 @@ export default {
 		if (env.UA) 屏蔽爬虫UA = 屏蔽爬虫UA.concat(await ADD(env.UA));
 		const workers_url = `https://${url.hostname}`;
 
-		if (env.ACCESS_PASSWORD) {
-			const authHeader = request.headers.get('Authorization');
-			if (!authHeader || !authHeader.startsWith('Basic ')) {
-				return new Response('Authentication required', {
-					status: 401,
-					headers: {
-						'WWW-Authenticate': 'Basic realm="Docker Proxy"',
-						'Content-Type': 'text/plain; charset=UTF-8',
-					},
-				});
-			}
+		// 强制要求所有请求都必须提供ACCESS_PASSWORD验证，不允许匿名请求
+		const authHeader = request.headers.get('Authorization');
+		if (!authHeader || !authHeader.startsWith('Basic ')) {
+			return new Response('Authentication required', {
+				status: 401,
+				headers: {
+					'WWW-Authenticate': 'Basic realm="Docker Proxy"',
+					'Content-Type': 'text/plain; charset=UTF-8',
+				},
+			});
+		}
 
-			const credentials = atob(authHeader.substring(6));
-			const [username, password] = credentials.split(':');
+		const credentials = atob(authHeader.substring(6));
+		const [username, password] = credentials.split(':');
 
-			if (password !== env.ACCESS_PASSWORD) {
-				return new Response('Invalid password', {
-
-					status: 401,
-					headers: {
-						'WWW-Authenticate': 'Basic realm="Docker Proxy"',
-						'Content-Type': 'text/plain; charset=UTF-8',
-					},
-				});
-			}
-
+		// 验证ACCESS_PASSWORD
+		if (!env.ACCESS_PASSWORD || password !== env.ACCESS_PASSWORD) {
+			return new Response('Invalid password', {
+				status: 401,
+				headers: {
+					'WWW-Authenticate': 'Basic realm="Docker Proxy"',
+					'Content-Type': 'text/plain; charset=UTF-8',
+				},
+			});
 		}
 
 		// 获取请求参数中的 ns

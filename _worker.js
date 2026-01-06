@@ -326,7 +326,9 @@ export default {
 		const [username, password] = credentials.split(':');
 
 		// 验证ACCESS_PASSWORD
-		if (!env.ACCESS_PASSWORD || password !== env.ACCESS_PASSWORD) {
+		// 对于docker login请求，特殊处理：如果是POST /v2/请求，允许通过认证
+		const isDockerLogin = request.method === 'POST' && url.pathname === '/v2/';
+		if (!isDockerLogin && (!env.ACCESS_PASSWORD || password !== env.ACCESS_PASSWORD)) {
 			return new Response('Invalid password', {
 				status: 401,
 				headers: {

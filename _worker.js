@@ -442,8 +442,16 @@ export default {
 			console.log(`Fetching token from: ${token_url}`);
 
 			try {
+				console.log(`Forwarding token request to Docker Hub auth: ${token_url} (Auth: ${token_parameter.headers['Authorization'] ? 'Yes' : 'No'})`);
 				const tokenResponse = await fetch(new Request(token_url, request), token_parameter);
-				console.log(`Token response status: ${tokenResponse.status}`);
+				console.log(`Token response status: ${tokenResponse.status} ${tokenResponse.statusText}`);
+				
+				// 检查token响应是否为429错误
+				if (tokenResponse.status === 429) {
+					console.error(`429 Too Many Requests from Docker Hub auth: ${token_url}`);
+					console.error(`Response headers: ${JSON.stringify(Object.fromEntries(tokenResponse.headers))}`);
+				}
+				
 				return tokenResponse;
 			} catch (error) {
 				console.error(`Token request failed: ${error.message}`);
@@ -491,9 +499,18 @@ export default {
 						tokenHeaders['Authorization'] = generateBasicAuth(env.DOCKER_USERNAME, env.DOCKER_PASSWORD);
 					}
 
+					console.log(`Fetching token for ${repo}: ${tokenUrl} (Auth: ${tokenHeaders['Authorization'] ? 'Yes' : 'No'})`);
 					const tokenRes = await fetch(tokenUrl, {
 						headers: tokenHeaders
 					});
+					console.log(`Token response for ${repo}: ${tokenRes.status} ${tokenRes.statusText}`);
+					
+					// 检查是否为429错误并记录详细信息
+					if (tokenRes.status === 429) {
+						console.error(`429 Too Many Requests when fetching token for ${repo}`);
+						console.error(`Token URL: ${tokenUrl}`);
+						console.error(`Response headers: ${JSON.stringify(Object.fromEntries(tokenRes.headers))}`);
+					}
 					
 					// 检查token响应状态
 					if (!tokenRes.ok) {
@@ -577,6 +594,12 @@ export default {
 			},
 			cacheTtl: 3600 // 缓存时间
 		};
+		
+		// 检查是否配置了Docker Hub凭证
+		if (!env.DOCKER_USERNAME || !env.DOCKER_PASSWORD) {
+			console.warn("DOCKER_USERNAME or DOCKER_PASSWORD not configured. Using anonymous requests to Docker Hub, which may trigger 429 Too Many Requests errors.");
+			console.warn("To avoid rate limits, configure DOCKER_USERNAME and DOCKER_PASSWORD in Cloudflare Workers secrets.");
+		}
 
 		// 对于 /v2/ 请求，不使用 Docker Hub 凭证，让 Docker 客户端请求 token
 		if (url.pathname !== '/v2/' && url.pathname !== '/v2') {
@@ -594,7 +617,16 @@ export default {
 
 		// 发起请求并处理响应
 		try {
+			console.log(`Forwarding request to Docker Hub: ${url} (Method: ${request.method}, Auth: ${parameter.headers['Authorization'] ? 'Yes' : 'No'})`);
 			let original_response = await fetch(new Request(url, request), parameter);
+			console.log(`Docker Hub response: ${original_response.status} ${original_response.statusText} for ${url}`);
+			
+			// 检查是否为429错误并记录详细信息
+			if (original_response.status === 429) {
+				console.error(`429 Too Many Requests from Docker Hub: ${url}`);
+				console.error(`Response headers: ${JSON.stringify(Object.fromEntries(original_response.headers))}`);
+			}
+			
 			let original_response_clone = original_response.clone();
 			let original_text = original_response_clone.body;
 			let response_headers = original_response.headers;
